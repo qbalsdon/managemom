@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow the app to read/write its device document (document id = device id).
+    // For production, restrict with: request.auth != null && request.auth.uid == deviceId
+    // or use App Check / custom claims.
+    match /devices/{deviceId} {
+      allow read, write: if true;
+    }
+  }
+}

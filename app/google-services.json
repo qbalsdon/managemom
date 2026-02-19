@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "154031857338",
+    "project_id": "managemom-9d6bf",
+    "storage_bucket": "managemom-9d6bf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:154031857338:android:05dd8c09aae7ea53686c83",
+        "android_client_info": {
+          "package_name": "com.balsdon.managemom"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgJZFXFdu47rfeKi07eS_aaUSa_tYoFHQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

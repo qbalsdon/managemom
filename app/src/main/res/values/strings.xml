@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Manage Mom</string>
+    <string name="accessibility_service_description">Manage Mom uses this to report installed apps and to help remove apps when requested.</string>
+    <string name="enable_accessibility">Enable accessibility service</string>
+    <string name="installed_apps">Installed apps</string>
+    <string name="delete_app">Remove app</string>
+    <string name="sync_status">Sync status</string>
+    <string name="sync">Sync</string>
+    <string name="permission_title">Allow app removal</string>
+    <string name="permission_message">Manage Mom can request removal of apps from this device. When you tap delete or receive a removal request, the system will ask you to confirm each uninstall.</string>
+    <string name="permission_continue">Continue</string>
+    <string name="permission_not_supported">This device may not support requesting app removal. You can still view the app list.</string>
+</resources>
