@@ -17,3 +17,8 @@ local.properties
 # Firebase service account key (do not commit)
 managemom-9d6bf-firebase-adminsdk-fbsvc-77b7b32eb8.json
 *firebase*adminsdk*.json
+
+# Signing (CI only)
+keystore.properties
+*.jks
+*.keystore
