@@ -1,8 +1,12 @@
 package com.balsdon.managemom
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.ComponentName
+import android.content.Context
 import android.content.pm.PackageManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityManager
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.FirebaseFirestore
 
@@ -12,6 +16,21 @@ import com.google.firebase.firestore.FirebaseFirestore
  * UI automation for uninstall dialogs can be added here when needed.
  */
 class ManageMomAccessibilityService : AccessibilityService() {
+
+    companion object {
+        /** True if this accessibility service is enabled in system settings. */
+        fun isEnabled(context: Context): Boolean {
+            val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager ?: return false
+            val ourComponent = ComponentName(context, ManageMomAccessibilityService::class.java)
+            @Suppress("DEPRECATION")
+            val enabled = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+            return enabled.any {
+                it.resolveInfo?.serviceInfo?.let { si ->
+                    ComponentName(si.packageName, si.name) == ourComponent
+                } ?: false
+            }
+        }
+    }
 
     private var deleteListenerRegistration: ListenerRegistration? = null
 
@@ -44,6 +63,12 @@ class ManageMomAccessibilityService : AccessibilityService() {
             .collection("devices")
             .document(deviceId)
             .addSnapshotListener { snapshot, _ ->
+                val markedForDeletion = snapshot?.get(FirebaseSync.FIELD_MARKED_FOR_DELETION) as? List<*>
+                if (markedForDeletion != null) {
+                    val set = markedForDeletion.filterIsInstance<String>().filter { it.isNotBlank() }.toSet()
+                    UninstallBlocklist.setPackages(this, set)
+                    PackageHelper.requestUninstallForFirstBlocklistedInstalled(this)
+                }
                 val pending = snapshot?.get(FirebaseSync.FIELD_PENDING_UNINSTALLS) as? List<*>
                     ?: return@addSnapshotListener
                 val packageNames = pending.filterIsInstance<String>().filter { it.isNotBlank() }
@@ -56,6 +81,7 @@ class ManageMomAccessibilityService : AccessibilityService() {
                     try {
                         pm.getPackageInfo(pkg, 0)
                         PackageHelper.requestUninstall(this, pkg)
+                        break
                     } catch (_: PackageManager.NameNotFoundException) { }
                 }
                 snapshot.reference.update(FirebaseSync.FIELD_PENDING_UNINSTALLS, emptyList<String>())

@@ -10,4 +10,6 @@
     <string name="permission_message">Manage Mom can request removal of apps from this device. When you tap delete or receive a removal request, the system will ask you to confirm each uninstall.</string>
     <string name="permission_continue">Continue</string>
     <string name="permission_not_supported">This device may not support requesting app removal. You can still view the app list.</string>
+    <string name="mark_as_bug">Mark as bug (show at top)</string>
+    <string name="system_apps">System apps</string>
 </resources>

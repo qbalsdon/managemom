@@ -12,42 +12,94 @@ import android.util.Log
 object PackageHelper {
 
     /**
-     * List all installed applications: user-installed (and updated system) first sorted by
-     * install date then alphabetical; system apps that cannot be uninstalled at the bottom,
-     * same sort.
+     * Builds a list with a "System apps" section header before the first system app.
+     * Used for the RecyclerView that shows both section headers and app rows.
+     */
+    fun buildListWithSectionHeaders(context: Context, apps: List<AppInfo>): List<AppListItem> {
+        val myPackage = context.packageName
+        val systemAppsTitle = context.getString(R.string.system_apps)
+        val result = mutableListOf<AppListItem>()
+        var systemHeaderAdded = false
+        for (app in apps) {
+            if (!app.canUninstall && app.packageName != myPackage && !systemHeaderAdded) {
+                result.add(AppListItem.SectionHeader(systemAppsTitle))
+                systemHeaderAdded = true
+            }
+            result.add(AppListItem.App(app))
+        }
+        return result
+    }
+
+    /** Preferred order for installation source tabs (sources not in this list appear after, sorted by label). */
+    private val SOURCE_TAB_ORDER = listOf(
+        "Sideloaded",
+        "Google Play",
+        "Package Installer",
+        "Amazon Appstore"
+    )
+
+    /**
+     * Groups apps by installation source; user apps per source, then "System apps" tab last.
+     * Returns (tabLabel, apps) in order: source tabs (user apps only), then ("System apps", system apps).
+     */
+    fun groupAppsBySource(context: Context, apps: List<AppInfo>): List<Pair<String, List<AppInfo>>> {
+        val (userApps, systemApps) = apps.partition { it.canUninstall }
+        val grouped = userApps.groupBy { getInstallSourceLabel(it.installerPackageName) }
+        val orderedSources = SOURCE_TAB_ORDER.filter { it in grouped.keys } +
+            grouped.keys.filter { it !in SOURCE_TAB_ORDER }.sorted()
+        val sourceTabs = orderedSources.map { source -> source to grouped[source]!! }
+        val systemAppsTitle = context.getString(R.string.system_apps)
+        return sourceTabs + (systemAppsTitle to systemApps)
+    }
+
+    /**
+     * List all installed applications. Packages marked as bug appear at the top.
+     * Then user-installed (by install date, alphabetical), then system apps at the bottom.
      */
     fun getInstalledApps(context: Context): List<AppInfo> {
         val pm = context.packageManager
         val myPackage = context.packageName
+        val bugSet = BugPackages.getPackages(context)
         val apps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0))
         } else {
             @Suppress("DEPRECATION")
             pm.getInstalledApplications(0)
         }
+        val markedForDeletionSet = UninstallBlocklist.getPackages(context)
         val list = apps
-            .filter { it.packageName != myPackage && it.packageName != "android" }
+            .filter { it.packageName != "android" }
             .map { applicationInfo ->
+                val isSelf = applicationInfo.packageName == myPackage
                 val label = applicationInfo.loadLabel(pm)
-                val canUninstall = canBeUninstalled(applicationInfo)
+                val canUninstall = !isSelf && canBeUninstalled(applicationInfo)
                 val installTime = getFirstInstallTime(pm, applicationInfo.packageName)
+                val isBug = applicationInfo.packageName in bugSet
+                val isMarkedForDeletion = applicationInfo.packageName in markedForDeletionSet
+                val installerPackageName = getInstallerPackageName(context, applicationInfo.packageName)
                 AppInfo(
                     packageName = applicationInfo.packageName,
                     appName = label,
                     canUninstall = canUninstall,
-                    firstInstallTime = installTime
+                    firstInstallTime = installTime,
+                    isBug = isBug,
+                    isMarkedForDeletion = isMarkedForDeletion,
+                    installerPackageName = installerPackageName
                 )
             }
-        val (userApps, systemApps) = list.partition { it.canUninstall }
-        val sortedUser = userApps.sortedWith(
-            compareByDescending<AppInfo> { it.firstInstallTime }
-                .thenBy { it.appName.toString().lowercase() }
-        )
-        val sortedSystem = systemApps.sortedWith(
-            compareByDescending<AppInfo> { it.firstInstallTime }
-                .thenBy { it.appName.toString().lowercase() }
-        )
-        return sortedUser + sortedSystem
+        val (selfApp, others) = list.partition { it.packageName == myPackage }
+        val (bugApps, nonBugApps) = others.partition { it.isBug }
+        val (userNonBug, systemNonBug) = nonBugApps.partition { it.canUninstall }
+        val (userBugs, systemBugs) = bugApps.partition { it.canUninstall }
+        // Sort: by installation source, then by install date (newest first), then by name
+        val sort = compareBy<AppInfo> { it.installerPackageName ?: "" }
+            .thenByDescending { it.firstInstallTime }
+            .thenBy { it.appName.toString().lowercase() }
+        val sortedUserBugs = userBugs.sortedWith(sort)
+        val sortedSystemBugs = systemBugs.sortedWith(sort)
+        val sortedUserNonBug = userNonBug.sortedWith(sort)
+        val sortedSystemNonBug = systemNonBug.sortedWith(sort)
+        return sortedUserBugs + sortedSystemBugs + sortedUserNonBug + sortedSystemNonBug + selfApp
     }
 
     /**
@@ -74,6 +126,34 @@ object PackageHelper {
     }
 
     /**
+     * Installer package name for this app (e.g. com.android.vending for Play Store). Null if unknown or sideloaded.
+     */
+    fun getInstallerPackageName(context: Context, packageName: String): String? {
+        val pm = context.packageManager
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                pm.getInstallSourceInfo(packageName).installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstallerPackageName(packageName)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Human-readable installation source label for display (e.g. "Google Play", "Sideloaded"). */
+    fun getInstallSourceLabel(installerPackageName: String?): String {
+        when {
+            installerPackageName.isNullOrBlank() -> return "Sideloaded"
+            installerPackageName == "com.android.vending" -> return "Google Play"
+            installerPackageName == "com.google.android.packageinstaller" -> return "Package Installer"
+            installerPackageName == "com.amazon.venezia" -> return "Amazon Appstore"
+            else -> return installerPackageName
+        }
+    }
+
+    /**
      * Human-readable app label for a package, or the package name if not installed / not found.
      */
     fun getAppLabel(context: Context, packageName: String): String {
@@ -87,6 +167,23 @@ object PackageHelper {
             ai.loadLabel(context.packageManager).toString()
         } catch (_: PackageManager.NameNotFoundException) {
             packageName
+        }
+    }
+
+    /**
+     * If any blocklisted package is currently installed, start the uninstall flow for the first one.
+     * Used when markedForDeletion is updated in Firebase so the app responds to remote list changes.
+     */
+    fun requestUninstallForFirstBlocklistedInstalled(context: Context) {
+        val self = context.packageName
+        val pm = context.packageManager
+        for (pkg in UninstallBlocklist.getPackages(context)) {
+            if (pkg == self) continue
+            try {
+                pm.getPackageInfo(pkg, 0)
+                requestUninstall(context, pkg)
+                return
+            } catch (_: PackageManager.NameNotFoundException) { }
         }
     }
 
@@ -106,8 +203,10 @@ object PackageHelper {
      * Start the system uninstall flow for the given package.
      * Uses ACTION_UNINSTALL_PACKAGE (with REQUEST_DELETE_PACKAGES); falls back to
      * app details in Settings if the uninstall intent is not available.
+     * Never uninstalls this app itself.
      */
     fun requestUninstall(context: Context, packageName: String) {
+        if (packageName == context.packageName) return
         val uninstallIntent = Intent(Intent.ACTION_UNINSTALL_PACKAGE).apply {
             data = Uri.fromParts("package", packageName, null)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

@@ -26,6 +26,7 @@ class ManageMomMessagingService : FirebaseMessagingService() {
             try {
                 pm.getPackageInfo(pkg, 0)
                 PackageHelper.requestUninstall(this, pkg)
+                break
             } catch (_: PackageManager.NameNotFoundException) { }
         }
     }

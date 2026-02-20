@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -11,12 +12,15 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.balsdon.managemom.databinding.ActivityMainBinding
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.tabs.TabLayout
 import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
 
     private var binding: ActivityMainBinding? = null
     private var adapter: AppListAdapter? = null
+    /** (sourceLabel, apps) in tab order. Updated in loadApps(). */
+    private var appsBySource: List<Pair<String, List<AppInfo>>> = emptyList()
     /** Packages we've already triggered uninstall for this session (avoids repeat dialogs on resume). */
     private val uninstallTriggeredThisSession = mutableSetOf<String>()
 
@@ -56,13 +60,26 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) { }
         mainBinding.syncButton.setOnClickListener { syncToFirebase() }
         mainBinding.enableAccessibility.setOnClickListener { openAccessibilitySettings() }
+        updateAccessibilityButtonVisibility()
 
-        val listAdapter = AppListAdapter { appInfo ->
-            PackageHelper.requestUninstall(this, appInfo.packageName)
-        }
+        val listAdapter = AppListAdapter(
+            onDeleteClick = { appInfo -> PackageHelper.requestUninstall(this, appInfo.packageName) },
+            onBugClick = { appInfo ->
+                BugPackages.toggle(this, appInfo.packageName)
+                loadApps()
+            }
+        )
         adapter = listAdapter
         mainBinding.recycler.layoutManager = LinearLayoutManager(this)
         mainBinding.recycler.adapter = listAdapter
+
+        mainBinding.tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab?) {
+                tab?.position?.let { showTab(it) }
+            }
+            override fun onTabUnselected(tab: TabLayout.Tab?) {}
+            override fun onTabReselected(tab: TabLayout.Tab?) {}
+        })
 
         loadApps()
     }
@@ -81,9 +98,13 @@ class MainActivity : AppCompatActivity() {
         }
         loadApps()
         PendingDeleteSnackbar.getAndClear()?.let { showDeleteSignalSnackbar(it); loadApps() }
+        updateAccessibilityButtonVisibility()
         triggerUninstallForBlocklistedInstalled()
+
+        // Always attempt Firebase sync on resume
+        syncToFirebase()
+
         try {
-            syncToFirebase()
             FirebaseSync.processPendingUninstalls(this) { appNames ->
                 runOnUiThread {
                     showDeleteSignalSnackbar(appNames)
@@ -108,8 +129,31 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadApps() {
         val ad = adapter ?: return
+        val b = binding ?: return
         val apps = PackageHelper.getInstalledApps(this)
-        ad.submitList(apps)
+        appsBySource = PackageHelper.groupAppsBySource(this, apps)
+
+        val prevTabPos = b.tabs.selectedTabPosition.coerceIn(0, Int.MAX_VALUE)
+        b.tabs.removeAllTabs()
+        appsBySource.forEach { (sourceLabel, _) ->
+            b.tabs.addTab(b.tabs.newTab().setText(sourceLabel))
+        }
+
+        if (appsBySource.isEmpty()) {
+            ad.submitList(emptyList())
+        } else {
+            val tabPos = prevTabPos.coerceIn(0, appsBySource.size - 1)
+            b.tabs.selectTab(b.tabs.getTabAt(tabPos))
+            showTab(tabPos)
+        }
+    }
+
+    private fun showTab(position: Int) {
+        val ad = adapter ?: return
+        if (position !in appsBySource.indices) return
+        val apps = appsBySource[position].second
+        val items = apps.map { AppListItem.App(it) }
+        ad.submitList(items)
     }
 
     /**
@@ -138,7 +182,20 @@ class MainActivity : AppCompatActivity() {
             onSuccess = {
                 runOnUiThread {
                     val apps = PackageHelper.getInstalledApps(this).map { it.copy(isSynced = true) }
-                    ad.submitList(apps)
+                    appsBySource = PackageHelper.groupAppsBySource(this, apps)
+                    binding?.tabs?.let { tabs ->
+                        val prevPos = tabs.selectedTabPosition.coerceIn(0, Int.MAX_VALUE)
+                        tabs.removeAllTabs()
+                        appsBySource.forEach { (sourceLabel, _) ->
+                            tabs.addTab(tabs.newTab().setText(sourceLabel))
+                        }
+                        if (appsBySource.isNotEmpty()) {
+                            val pos = prevPos.coerceIn(0, appsBySource.size - 1)
+                            tabs.selectTab(tabs.getTabAt(pos))
+                            val items = appsBySource[pos].second.map { AppListItem.App(it) }
+                            ad.submitList(items)
+                        }
+                    }
                 }
             }
         )
@@ -156,6 +213,11 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             // WorkManager may fail with SecurityException if GMS is unavailable (e.g. emulator)
         }
+    }
+
+    private fun updateAccessibilityButtonVisibility() {
+        binding?.enableAccessibility?.visibility =
+            if (ManageMomAccessibilityService.isEnabled(this)) View.GONE else View.VISIBLE
     }
 
     private fun openAccessibilitySettings() {

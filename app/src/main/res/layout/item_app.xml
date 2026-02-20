@@ -16,6 +16,14 @@
         android:gravity="center_vertical"
         android:padding="12dp">
 
+        <ImageView
+            android:id="@+id/app_icon"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            android:layout_marginEnd="12dp" />
+
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -43,6 +51,16 @@
                 tools:text="com.example.package" />
 
         </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/bug_icon"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/mark_as_bug"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="12dp"
+            android:src="@drawable/ic_bug"
+            app:tint="@color/bug_unmarked" />
 
         <ImageView
             android:id="@+id/sync_icon"

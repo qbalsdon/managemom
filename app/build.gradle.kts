@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     id("com.google.gms.google-services")
@@ -25,7 +27,7 @@ android {
         create("release") {
             val keystorePropertiesFile = rootProject.file("keystore.properties")
             if (keystorePropertiesFile.exists()) {
-                val keystoreProperties = java.util.Properties()
+                val keystoreProperties = Properties()
                 keystoreProperties.load(keystorePropertiesFile.inputStream())
                 storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
                 storePassword = keystoreProperties["storePassword"] as String

@@ -47,14 +47,13 @@
             android:layout_marginTop="16dp"
             android:text="@string/enable_accessibility" />
 
-        <TextView
-            android:id="@+id/section_label"
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tabs"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginTop="24dp"
-            android:text="@string/installed_apps"
-            android:textAppearance="?attr/textAppearanceSubtitle1" />
+            android:layout_marginTop="8dp"
+            app:tabMode="scrollable"
+            app:tabGravity="fill" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler"
