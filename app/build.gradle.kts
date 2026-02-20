@@ -5,6 +5,11 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+val versionCodeFromEnv = System.getenv("VERSION_CODE")?.toIntOrNull()
+val buildNumberFromEnv = System.getenv("BUILD_NUMBER") ?: ""
+val versionCodeFinal = versionCodeFromEnv ?: 1
+val versionNameFinal = if (buildNumberFromEnv.isNotEmpty()) "1.0-$versionCodeFinal-$buildNumberFromEnv" else "1.0"
+
 android {
     namespace = "com.balsdon.managemom"
     compileSdk {
@@ -17,8 +22,8 @@ android {
         applicationId = "com.balsdon.managemom"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = versionCodeFinal
+        versionName = versionNameFinal
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -47,6 +52,7 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11

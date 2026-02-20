@@ -1,12 +1,9 @@
-# Build and sign the release APK. Uses secrets for the signing keystore.
-# GOOGLE_API is your Firebase/Google service account JSON (optional for this workflow).
-# Required repo secrets for signing:
-#   ANDROID_KEYSTORE_BASE64 - base64-encoded release keystore file (e.g. base64 -w0 release.keystore)
-#   ANDROID_KEYSTORE_PASSWORD - keystore password
-#   ANDROID_KEY_ALIAS - key alias
-#   ANDROID_KEY_PASSWORD - key password
+# Build and sign the release APK, build AAB, upload to Play Store alpha.
+# Required repo secrets:
+#   Signing: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#   Play Store: PLAY_STORE_JSON - full contents of the Google Play service account JSON key file
 
-name: Build and sign APK
+name: Build, sign and publish
 
 on:
   push:
@@ -38,12 +35,29 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build release APK
-        run: ./gradlew assembleRelease --no-daemon
+      - name: Build release APK and AAB
+        env:
+          VERSION_CODE: ${{ vars.VERSION_CODE }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
+
+      - name: Rename APK with version
+        run: |
+          VERSION_NAME="1.0-${{ vars.VERSION_CODE }}-${{ github.run_number }}"
+          mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/app-release-${VERSION_NAME}.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: app/build/outputs/apk/release/app-release.apk
+          name: app-release-${{ github.run_number }}
+          path: app/build/outputs/apk/release/
           if-no-files-found: error
+
+      - name: Upload to Google Play (alpha)
+        uses: r0adkll/upload-google-play@v1.1.3
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_JSON }}
+          packageName: com.balsdon.managemom
+          releaseFile: app/build/outputs/bundle/release/app-release.aab
+          track: alpha
+          status: completed
